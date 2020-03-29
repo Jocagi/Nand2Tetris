@@ -16,5 +16,7 @@ CHIP PC {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+	Register(in[0..15]=false, load=reset, out=o1);
+    
+	
 }
