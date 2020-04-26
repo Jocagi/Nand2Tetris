@@ -39,6 +39,98 @@ CHIP CPU {
         addressM[15],    // Address in data memory (of M)
         pc[15];          // address of next instruction
 
+
     PARTS:
-    // Put your code here:
+
+    //A instruction
+    //[c]ccccccccccccc
+    // |
+    // v
+    //C = 0, means A Instruction
+    //C = 1, means C Instruction
+
+    Mux16(a=instruction, b=outALU, sel=instruction[15], out=inputARegister);
+
+    Not(in=instruction[15], out=IsAInstruction);
+    
+    //If destination bits correspond to A register
+    //d1 = 1 (instruction[5]) means A register
+    And(a=instruction[15], b=instruction[5], out=destA);
+    Or(a=IsAInstruction, b=destA, out=inA);
+    
+    //Input to A register
+    ARegister(in=inputARegister, load=inA, out=A, out[0..14]=addressM);
+
+
+    // C Instruction
+    // (1)(1)(1)(a)(c1)(c2)(c3)(c4)(c5)(c6)(d1)(d2)(d3)(j1)(j2)(j3)
+    // Values:
+    // 0     Instruction code
+    // 1-3   Not Used
+    // 4-9   Control bits - ALU
+    // 10-12 Destination bits
+    // 13-15 Jump bits
+    //
+    // ALU takes input from DRegister and from ARegister or inM
+    
+    //First control bit(a), switches between A register and Memory
+    And(a=instruction[15], b=instruction[12], out=AMSwitch);
+    Mux16(a=A, b=inM, sel=AMSwitch, out=AM);
+
+
+    //If destination bits correspond to D register
+    //d2 = 1 (instruction[4]) means D register
+    And(a=instruction[15], b=instruction[4], out=inD);
+
+    //Input to D register
+    DRegister(in=outALU, load=inD, out=D);
+
+
+    //Control bits to ALU
+    ALU(x=D, y=AM, out=outALU, out=outM,
+        zx=instruction[11],
+        nx=instruction[10],
+        zy=instruction[9],
+        ny=instruction[8],
+        f=instruction[7],
+        no=instruction[6],
+
+        zr=zrOut,
+        ng=ngOut
+    );
+
+
+
+    // writeM uses 3rd destination load bit.
+    // d3 = 1 (instruction[3]) means Memory
+    And(a=instruction[15], b=instruction[3], out=writeM);
+
+
+    // Program Counter.
+    // Emits next instruction.
+    // Reset: = 0
+    // 000 nojump: ++
+    // 111 goto: = A
+    // (j1)(j2)(j3) Conditional goto: = A || ++
+
+    Not(in=ngOut, out=pos);
+    Not(in=zrOut, out=nzr);
+
+    //Jump greater than
+    And(a=instruction[15], b=instruction[0], out=jgt);
+    And(a=pos, b=nzr, out=posnzr);
+    And(a=jgt, b=posnzr, out=ld1);
+
+    //Jump equal
+    And(a=instruction[15], b=instruction[1], out=jeq);
+    And(a=jeq, b=zrOut, out=ld2);
+
+    //Jump less than
+    And(a=instruction[15], b=instruction[2], out=jlt);
+    And(a=jlt, b=ngOut, out=ld3);
+
+    Or(a=ld1, b=ld2, out=ldt);
+    Or(a=ld3, b=ldt, out=ld);
+
+    PC(in=A, load=ld, inc=true, reset=reset, out[0..14]=pc);
 }
